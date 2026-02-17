@@ -46,6 +46,27 @@ export const endpoints = {
     update: (userId: string) => buildUrl(API_ENDPOINTS.USERS.UPDATE, { userId }),
     delete: (userId: string) => buildUrl(API_ENDPOINTS.USERS.DELETE, { userId }),
   },
+  clients: {
+    list: () => API_ENDPOINTS.CLIENTS.LIST,
+    detail: (clientId: string) => buildUrl(API_ENDPOINTS.CLIENTS.DETAIL, { clientId }),
+    create: () => API_ENDPOINTS.CLIENTS.CREATE,
+    update: (clientId: string) => buildUrl(API_ENDPOINTS.CLIENTS.UPDATE, { clientId }),
+    delete: (clientId: string) => buildUrl(API_ENDPOINTS.CLIENTS.DELETE, { clientId }),
+  },
+  products: {
+    list: () => API_ENDPOINTS.PRODUCTS.LIST,
+    detail: (productId: string) => buildUrl(API_ENDPOINTS.PRODUCTS.DETAIL, { productId }),
+    create: () => API_ENDPOINTS.PRODUCTS.CREATE,
+    update: (productId: string) => buildUrl(API_ENDPOINTS.PRODUCTS.UPDATE, { productId }),
+    delete: (productId: string) => buildUrl(API_ENDPOINTS.PRODUCTS.DELETE, { productId }),
+  },
+  sales: {
+    list: () => API_ENDPOINTS.SALES.LIST,
+    detail: (saleId: string) => buildUrl(API_ENDPOINTS.SALES.DETAIL, { saleId }),
+    create: () => API_ENDPOINTS.SALES.CREATE,
+    update: (saleId: string) => buildUrl(API_ENDPOINTS.SALES.UPDATE, { saleId }),
+    delete: (saleId: string) => buildUrl(API_ENDPOINTS.SALES.DELETE, { saleId }),
+  },
   audit: {
     list: () => API_ENDPOINTS.AUDIT.LIST,
     create: () => API_ENDPOINTS.AUDIT.CREATE,

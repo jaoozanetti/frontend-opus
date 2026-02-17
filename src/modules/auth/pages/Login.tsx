@@ -21,7 +21,7 @@ import { isValidEmail } from '@shared/utils'
 export function LoginPage() {
   const navigate = useNavigate()
   const { login, isAuthenticated } = useAuth()
-  const { tenant, tenantId } = useTenant()
+  const { tenant } = useTenant()
   const { isDarkMode, toggleDarkMode } = useTheme()
 
   const [email, setEmail] = useState('')
@@ -49,15 +49,10 @@ export function LoginPage() {
       return
     }
 
-    if (!tenantId) {
-      setError('Tenant não identificado. Verifique a URL.')
-      return
-    }
-
     setIsLoading(true)
 
     try {
-      await login(email, password, tenantId)
+      await login(email, password, 'default')
       navigate('/', { replace: true })
     } catch {
       setError('Credenciais inválidas. Tente novamente.')

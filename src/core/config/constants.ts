@@ -12,15 +12,36 @@ export const API_ENDPOINTS = {
     REFRESH: '/auth/refresh',
     ME: '/auth/me',
   },
-  TENANTS: {
-    CONFIG: '/tenants/:tenantId/config',
-  },
   USERS: {
     LIST: '/users',
     DETAIL: '/users/:userId',
     CREATE: '/users',
     UPDATE: '/users/:userId',
     DELETE: '/users/:userId',
+  },
+  CLIENTS: {
+    LIST: '/clients',
+    DETAIL: '/clients/:clientId',
+    CREATE: '/clients',
+    UPDATE: '/clients/:clientId',
+    DELETE: '/clients/:clientId',
+  },
+  PRODUCTS: {
+    LIST: '/products',
+    DETAIL: '/products/:productId',
+    CREATE: '/products',
+    UPDATE: '/products/:productId',
+    DELETE: '/products/:productId',
+  },
+  SALES: {
+    LIST: '/sales',
+    DETAIL: '/sales/:saleId',
+    CREATE: '/sales',
+    UPDATE: '/sales/:saleId',
+    DELETE: '/sales/:saleId',
+  },
+  TENANTS: {
+    CONFIG: '/tenants/:tenantId/config',
   },
   AUDIT: {
     LIST: '/audit-logs',

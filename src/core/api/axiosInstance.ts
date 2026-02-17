@@ -19,7 +19,7 @@ export function createAxiosInstance(): AxiosInstance {
   const instance = axios.create({
     baseURL: env.API_BASE_URL,
     timeout: 10000,
-    withCredentials: true, // Para enviar cookies httpOnly automaticamente
+    withCredentials: false,
     headers: {
       'Content-Type': 'application/json',
     },

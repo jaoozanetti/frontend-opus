@@ -1,19 +1,22 @@
 /**
  * @file src/core/contexts/AuthContext.tsx
  * 
- * Contexto global de autenticação
+ * Contexto global de autenticação integrado com api-vendas
  * 
- * Decisão de design:
- * - Access Token armazenado APENAS em memória (useState)
- * - Refresh Token gerenciado via cookie httpOnly (pelo backend)
- * - Permissões dinâmicas (RBAC) baseadas no profile do usuário
- * - Interceptores configurados após login para injetar token
- * - Logout automático se refresh falhar
+ * Fluxo de login:
+ * 1. POST /api/auth/login com { email, password }
+ * 2. Recebe { access_token, refresh_token }
+ * 3. Decodifica JWT para obter userId
+ * 4. GET /api/users/{userId} para dados do usuário
+ * 5. Armazena tokens + user no state
  * 
- * Segurança:
- * - Access Token NUNCA persiste em localStorage/sessionStorage
- * - Ao recarregar a página, tenta refresh automático
- * - Se refresh falhar, redireciona para login
+ * Fluxo de refresh:
+ * 1. POST /api/auth/refresh com { refresh_token }
+ * 2. Recebe novo par { access_token, refresh_token }
+ * 
+ * Persistência:
+ * - access_token: memória (tokenStore)
+ * - refresh_token: localStorage (tokenStore)
  */
 
 import {
@@ -28,12 +31,18 @@ import {
   AuthContextType,
   AuthUser,
   Permission,
-  LoginResponse,
-  ApiResponse,
-  RefreshTokenResponse,
+  UserProfile,
 } from '@shared/types'
-import { getApiClient } from '@core/adapters'
-import { endpoints } from '@core/api'
+import {
+  axiosInstance,
+  endpoints,
+  getAccessToken,
+  setAccessToken,
+  getRefreshToken,
+  setRefreshToken,
+  clearTokens,
+  decodeJwtPayload,
+} from '@core/api'
 import { devLog, devError } from '@core/config'
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -43,150 +52,229 @@ interface AuthProviderProps {
   tenantId: string | null
 }
 
+/** Perfil admin padrão (API não possui RBAC) */
+const defaultPermissions: Permission[] = [
+  { id: '1', code: 'users.view', module: 'users', action: 'read', description: 'Ver usuários', createdAt: '' },
+  { id: '2', code: 'users.create', module: 'users', action: 'create', description: 'Criar usuários', createdAt: '' },
+  { id: '3', code: 'users.update', module: 'users', action: 'update', description: 'Editar usuários', createdAt: '' },
+  { id: '4', code: 'users.delete', module: 'users', action: 'delete', description: 'Excluir usuários', createdAt: '' },
+  { id: '5', code: 'tenants.view', module: 'tenants', action: 'read', description: 'Ver tenants', createdAt: '' },
+  { id: '6', code: 'audit.view', module: 'audit', action: 'read', description: 'Ver auditoria', createdAt: '' },
+  { id: '7', code: 'profiles.view', module: 'profiles', action: 'read', description: 'Ver perfis', createdAt: '' },
+  { id: '8', code: 'clients.view', module: 'clients', action: 'read', description: 'Ver clientes', createdAt: '' },
+  { id: '9', code: 'clients.create', module: 'clients', action: 'create', description: 'Criar clientes', createdAt: '' },
+  { id: '10', code: 'clients.update', module: 'clients', action: 'update', description: 'Editar clientes', createdAt: '' },
+  { id: '11', code: 'clients.delete', module: 'clients', action: 'delete', description: 'Excluir clientes', createdAt: '' },
+  { id: '12', code: 'products.view', module: 'products', action: 'read', description: 'Ver produtos', createdAt: '' },
+  { id: '13', code: 'products.create', module: 'products', action: 'create', description: 'Criar produtos', createdAt: '' },
+  { id: '14', code: 'products.update', module: 'products', action: 'update', description: 'Editar produtos', createdAt: '' },
+  { id: '15', code: 'products.delete', module: 'products', action: 'delete', description: 'Excluir produtos', createdAt: '' },
+  { id: '16', code: 'sales.view', module: 'sales', action: 'read', description: 'Ver vendas', createdAt: '' },
+  { id: '17', code: 'sales.create', module: 'sales', action: 'create', description: 'Criar vendas', createdAt: '' },
+  { id: '18', code: 'sales.delete', module: 'sales', action: 'delete', description: 'Excluir vendas', createdAt: '' },
+]
+
+const defaultProfile: UserProfile = {
+  id: 'profile-admin',
+  name: 'Administrador',
+  description: 'Acesso total ao sistema',
+  permissions: defaultPermissions,
+  createdAt: '',
+  updatedAt: '',
+}
+
+/** Converte usuário da API para AuthUser do frontend */
+function apiUserToAuthUser(apiUser: { id: number; name: string; email: string }): AuthUser {
+  return {
+    id: String(apiUser.id),
+    email: apiUser.email,
+    name: apiUser.name,
+    tenantId: 'default',
+    profileId: 'profile-admin',
+    profile: defaultProfile,
+    lastLoginAt: new Date().toISOString(),
+    createdAt: '',
+  }
+}
+
 export function AuthProvider({ children, tenantId }: AuthProviderProps) {
-  // Access Token em MEMÓRIA apenas (segurança)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
   const [user, setUser] = useState<AuthUser | null>(null)
   const [permissions, setPermissions] = useState<Permission[]>([])
+  const [accessTokenState, setAccessTokenState] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const isAuthenticated = !!user && !!accessToken
+  const isAuthenticated = !!user && !!accessTokenState
 
   /**
-   * Login: autentica e armazena token em memória
+   * Busca dados do usuário pelo ID usando o token atual
    */
-  const login = useCallback(async (email: string, password: string, loginTenantId: string) => {
+  const fetchUserById = useCallback(async (userId: number, token: string): Promise<AuthUser> => {
+    const response = await axiosInstance.get(`${endpoints.users.detail(String(userId))}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    return apiUserToAuthUser(response.data)
+  }, [])
+
+  /**
+   * Login: autentica com email/password e carrega dados do usuário
+   */
+  const login = useCallback(async (email: string, password: string, _loginTenantId: string) => {
     setIsLoading(true)
     setError(null)
 
     try {
-      const apiClient = getApiClient()
-      const response = await apiClient.post<ApiResponse<LoginResponse>>(
-        endpoints.auth.login(),
-        { email, password, tenantId: loginTenantId }
-      )
+      // 1. Autentica na API
+      const loginResponse = await axiosInstance.post(endpoints.auth.login(), { email, password })
+      const { access_token, refresh_token } = loginResponse.data
 
-      const { user: loggedUser, accessToken: token } = response.data
-      // refreshToken é gerenciado pelo cookie httpOnly (set-cookie header do backend)
+      // 2. Armazena tokens
+      setAccessToken(access_token)
+      setRefreshToken(refresh_token)
+      setAccessTokenState(access_token)
 
-      setUser(loggedUser)
-      setAccessToken(token)
-      setPermissions(loggedUser.profile.permissions)
+      // 3. Decodifica JWT para obter userId
+      const payload = decodeJwtPayload(access_token)
+      const userId = payload?.sub as number
 
-      devLog('Login realizado:', loggedUser.email)
+      if (!userId) {
+        throw new Error('Token JWT inválido: userId não encontrado')
+      }
+
+      // 4. Busca dados do usuário
+      const authUser = await fetchUserById(userId, access_token)
+      setUser(authUser)
+      setPermissions(defaultPermissions)
+
+      devLog('Login realizado:', email)
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao realizar login'
+      const errorMessage = err instanceof Error
+        ? err.message
+        : (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Credenciais inválidas'
       setError(errorMessage)
       devError('Erro no login', err)
       throw err
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [fetchUserById])
 
   /**
-   * Logout: limpa tudo da memória
+   * Logout: limpa tokens e estado
    */
   const logout = useCallback(() => {
     devLog('Logout realizado')
-    setUser(null)
-    setAccessToken(null)
-    setPermissions([])
-    setError(null)
 
     // Tenta avisar backend (best effort)
+    const token = getAccessToken()
+    const refreshTk = getRefreshToken()
+    if (token) {
+      axiosInstance.post(endpoints.auth.logout(), { refresh_token: refreshTk }, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => { /* ignora */ })
+    }
+
+    clearTokens()
+    setUser(null)
+    setAccessTokenState(null)
+    setPermissions([])
+    setError(null)
+  }, [])
+
+  /**
+   * Refresh Access Token usando refresh_token armazenado
+   */
+  const refreshAccessToken = useCallback(async () => {
+    const refreshTk = getRefreshToken()
+    if (!refreshTk) {
+      throw new Error('Sem refresh token')
+    }
+
     try {
-      const apiClient = getApiClient()
-      apiClient.post(endpoints.auth.logout()).catch(() => {
-        // Ignora erro no logout - já limpou local
+      const response = await axiosInstance.post(endpoints.auth.refresh(), {
+        refresh_token: refreshTk,
       })
-    } catch {
-      // Ignora
+
+      const { access_token, refresh_token } = response.data
+      setAccessToken(access_token)
+      setRefreshToken(refresh_token)
+      setAccessTokenState(access_token)
+
+      devLog('Access token renovado com sucesso')
+      return access_token
+    } catch (err) {
+      devError('Falha ao renovar access token', err)
+      clearTokens()
+      setUser(null)
+      setAccessTokenState(null)
+      setPermissions([])
+      throw err
     }
   }, [])
 
   /**
-   * Refresh Access Token via cookie httpOnly
-   * Chamado automaticamente pelo interceptor de auth
-   */
-  const refreshAccessToken = useCallback(async () => {
-    try {
-      const apiClient = getApiClient()
-      const response = await apiClient.post<ApiResponse<RefreshTokenResponse>>(
-        endpoints.auth.refresh()
-      )
-
-      const { accessToken: newToken } = response.data
-      setAccessToken(newToken)
-      devLog('Access token renovado com sucesso')
-    } catch (err) {
-      devError('Falha ao renovar access token', err)
-      logout()
-      throw err
-    }
-  }, [logout])
-
-  /**
-   * Verifica se usuário tem uma permissão específica
+   * Checks de permissão (sempre true pois API não tem RBAC)
    */
   const hasPermission = useCallback((permissionCode: string): boolean => {
     return permissions.some((p) => p.code === permissionCode)
   }, [permissions])
 
-  /**
-   * Verifica se usuário tem QUALQUER uma das permissões
-   */
   const hasAnyPermission = useCallback((permissionCodes: string[]): boolean => {
     return permissionCodes.some((code) => permissions.some((p) => p.code === code))
   }, [permissions])
 
-  /**
-   * Verifica se usuário tem TODAS as permissões
-   */
   const hasAllPermissions = useCallback((permissionCodes: string[]): boolean => {
     return permissionCodes.every((code) => permissions.some((p) => p.code === code))
   }, [permissions])
 
   /**
-   * Ao montar, tenta recuperar sessão com refresh token (cookie httpOnly)
-   * Isso permite manter sessão ao recarregar a página
+   * Ao montar, tenta recuperar sessão via refresh token
    */
   useEffect(() => {
-    if (!tenantId) {
-      setIsLoading(false)
-      return
-    }
-
     const tryRecoverSession = async () => {
-      try {
-        await refreshAccessToken()
-
-        // Se refresh funcionou, carrega dados do usuário
-        const apiClient = getApiClient()
-        const response = await apiClient.get<ApiResponse<{ user: AuthUser }>>(
-          endpoints.auth.me()
-        )
-
-        const recoveredUser = response.data.user
-        setUser(recoveredUser)
-        setPermissions(recoveredUser.profile.permissions)
-        devLog('Sessão recuperada:', recoveredUser.email)
-      } catch {
-        // Sem sessão ativa, normal para primeiro acesso
+      const refreshTk = getRefreshToken()
+      if (!refreshTk) {
         devLog('Nenhuma sessão ativa encontrada')
+        setIsLoading(false)
+        return
+      }
+
+      try {
+        // Tenta renovar o token
+        const response = await axiosInstance.post(endpoints.auth.refresh(), {
+          refresh_token: refreshTk,
+        })
+
+        const { access_token, refresh_token } = response.data
+        setAccessToken(access_token)
+        setRefreshToken(refresh_token)
+        setAccessTokenState(access_token)
+
+        // Decodifica JWT para obter userId
+        const payload = decodeJwtPayload(access_token)
+        const userId = payload?.sub as number
+
+        if (userId) {
+          const authUser = await fetchUserById(userId, access_token)
+          setUser(authUser)
+          setPermissions(defaultPermissions)
+          devLog('Sessão recuperada:', authUser.email)
+        }
+      } catch {
+        devLog('Sessão expirada, limpando tokens')
+        clearTokens()
       } finally {
         setIsLoading(false)
       }
     }
 
     tryRecoverSession()
-  }, [tenantId, refreshAccessToken])
+  }, [tenantId, fetchUserById])
 
   const contextValue = useMemo<AuthContextType>(() => ({
     user,
     permissions,
-    accessToken,
+    accessToken: accessTokenState,
     isAuthenticated,
     isLoading,
     error,
@@ -197,7 +285,7 @@ export function AuthProvider({ children, tenantId }: AuthProviderProps) {
     hasAnyPermission,
     hasAllPermissions,
   }), [
-    user, permissions, accessToken, isAuthenticated,
+    user, permissions, accessTokenState, isAuthenticated,
     isLoading, error, login, logout, refreshAccessToken,
     hasPermission, hasAnyPermission, hasAllPermissions,
   ])

@@ -29,13 +29,14 @@ function loadEnvironmentConfig(): EnvironmentConfig {
     throw new Error('❌ VITE_API_BASE_URL não configurada')
   }
 
-  if (useMock === undefined) {
-    throw new Error('❌ VITE_USE_MOCK não configurada (deve ser true ou false)')
-  }
+  // VITE_USE_MOCK é opcional, default false
+  // if (useMock === undefined) {
+  //   throw new Error('❌ VITE_USE_MOCK não configurada (deve ser true ou false)')
+  // }
 
   return {
     API_BASE_URL: apiBaseUrl,
-    USE_MOCK: useMock === 'true',
+    USE_MOCK: useMock === 'true' || false,
     NODE_ENV: nodeEnv,
   }
 }

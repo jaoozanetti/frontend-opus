@@ -17,9 +17,9 @@ function NavIcon({ icon }: { icon: string }) {
   const icons: Record<string, string> = {
     dashboard: '📊',
     users: '👥',
-    building: '🏢',
-    audit: '📋',
-    shield: '🛡️',
+    clients: '🧑‍💼',
+    products: '📦',
+    sales: '💰',
     settings: '⚙️',
   }
   return <span className="text-base">{icons[icon] || '📄'}</span>

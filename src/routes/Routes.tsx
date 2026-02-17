@@ -25,7 +25,9 @@ import { LoginPage } from '@modules/auth/pages/Login'
 import { AdminLayout } from '@modules/admin/components/AdminLayout'
 import { AdminDashboard } from '@modules/admin/pages/Dashboard'
 import { UsersPage } from '@modules/admin/pages/Users'
-import { AuditPage } from '@modules/admin/pages/Audit'
+import { ClientsPage } from '@modules/admin/pages/Clients'
+import { ProductsPage } from '@modules/admin/pages/Products'
+import { SalesPage } from '@modules/admin/pages/Sales'
 import { AdminSettings } from '@modules/admin/pages/Settings'
 
 // ──────────────────────────────
@@ -41,18 +43,14 @@ import { ClientSettings } from '@modules/client/pages/Settings'
  * Componente que redireciona baseado no perfil do usuário
  */
 function RootRedirect() {
-  const { user, isAuthenticated } = useAuth()
+  const { isAuthenticated } = useAuth()
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
   }
 
-  // Se tem permissões de admin, vai para admin
-  const isAdmin = user?.profile.permissions.some(
-    (p) => p.module === 'tenants' || p.module === 'profiles'
-  )
-
-  return <Navigate to={isAdmin ? '/admin' : '/app'} replace />
+  // Sempre redireciona para admin (API não tem conceito de client area)
+  return <Navigate to="/admin" replace />
 }
 
 export function AppRoutes() {
@@ -83,10 +81,26 @@ export function AppRoutes() {
           }
         />
         <Route
-          path="audit"
+          path="clients"
           element={
-            <ProtectedRoute requiredPermission="audit.view">
-              <AuditPage />
+            <ProtectedRoute requiredPermission="clients.view">
+              <ClientsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="products"
+          element={
+            <ProtectedRoute requiredPermission="products.view">
+              <ProductsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="sales"
+          element={
+            <ProtectedRoute requiredPermission="sales.view">
+              <SalesPage />
             </ProtectedRoute>
           }
         />

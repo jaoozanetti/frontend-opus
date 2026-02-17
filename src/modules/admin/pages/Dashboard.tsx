@@ -1,17 +1,43 @@
 /**
  * @file src/modules/admin/pages/Dashboard.tsx
  * 
- * Dashboard do Admin
+ * Dashboard do Admin - dados reais da API
  */
 
+import { useEffect, useState } from 'react'
 import { PageContainer } from '@shared/components/Layout/PageContainer'
 import { Card, CardHeader } from '@shared/components/UI/Card'
 import { useAuth } from '@shared/hooks'
-import { useTenant } from '@shared/hooks'
+import { listUsers } from '@shared/services/userService'
+import { listClients } from '@shared/services/clientService'
+import { listProducts } from '@shared/services/productService'
+import { listSales } from '@shared/services/saleService'
 
 export function AdminDashboard() {
   const { user } = useAuth()
-  const { tenant } = useTenant()
+  const [counts, setCounts] = useState({ users: 0, clients: 0, products: 0, sales: 0 })
+
+  useEffect(() => {
+    async function loadCounts() {
+      try {
+        const [users, clients, products, sales] = await Promise.all([
+          listUsers(),
+          listClients(),
+          listProducts(1, 1),
+          listSales(1, 1),
+        ])
+        setCounts({
+          users: users.length,
+          clients: clients.length,
+          products: products.meta.totalItems,
+          sales: sales.meta.totalItems,
+        })
+      } catch (err) {
+        console.error('Erro ao carregar dados do dashboard:', err)
+      }
+    }
+    loadCounts()
+  }, [])
 
   return (
     <PageContainer
@@ -20,27 +46,27 @@ export function AdminDashboard() {
     >
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardHeader title="Usuários" description="Total de usuários ativos" />
+          <CardHeader title="Usuários" description="Cadastrados no sistema" />
           <p className="text-3xl font-bold" style={{ color: 'var(--color-primary)' }}>
-            24
+            {counts.users}
           </p>
         </Card>
         <Card>
-          <CardHeader title="Tenant" description="Tenant atual" />
-          <p className="text-lg font-semibold" style={{ color: 'var(--color-foreground)' }}>
-            {tenant?.name || '-'}
+          <CardHeader title="Clientes" description="Clientes cadastrados" />
+          <p className="text-3xl font-bold" style={{ color: 'var(--color-foreground)' }}>
+            {counts.clients}
           </p>
         </Card>
         <Card>
-          <CardHeader title="Perfil" description="Seu perfil de acesso" />
-          <p className="text-lg font-semibold" style={{ color: 'var(--color-foreground)' }}>
-            {user?.profile.name || '-'}
+          <CardHeader title="Produtos" description="Produtos no catálogo" />
+          <p className="text-3xl font-bold" style={{ color: 'var(--color-foreground)' }}>
+            {counts.products}
           </p>
         </Card>
         <Card>
-          <CardHeader title="Permissões" description="Total de permissões" />
+          <CardHeader title="Vendas" description="Total de vendas realizadas" />
           <p className="text-3xl font-bold" style={{ color: 'var(--color-secondary)' }}>
-            {user?.profile.permissions.length || 0}
+            {counts.sales}
           </p>
         </Card>
       </div>

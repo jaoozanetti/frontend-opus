@@ -33,10 +33,9 @@ export const AUTH_ROUTES: RouteDefinition[] = [
 export const ADMIN_ROUTES: RouteDefinition[] = [
   { path: '/admin', label: 'Dashboard', icon: 'dashboard', showInNav: true },
   { path: '/admin/users', label: 'Usuários', icon: 'users', requiredPermission: 'users.view', showInNav: true },
-  { path: '/admin/users/:userId', label: 'Detalhe Usuário', requiredPermission: 'users.view' },
-  { path: '/admin/tenants', label: 'Tenants', icon: 'building', requiredPermission: 'tenants.view', showInNav: true },
-  { path: '/admin/audit', label: 'Auditoria', icon: 'audit', requiredPermission: 'audit.view', showInNav: true },
-  { path: '/admin/profiles', label: 'Perfis', icon: 'shield', requiredPermission: 'profiles.view', showInNav: true },
+  { path: '/admin/clients', label: 'Clientes', icon: 'clients', requiredPermission: 'clients.view', showInNav: true },
+  { path: '/admin/products', label: 'Produtos', icon: 'products', requiredPermission: 'products.view', showInNav: true },
+  { path: '/admin/sales', label: 'Vendas', icon: 'sales', requiredPermission: 'sales.view', showInNav: true },
   { path: '/admin/settings', label: 'Configurações', icon: 'settings', showInNav: true },
 ]
 

@@ -5,9 +5,8 @@
  * 
  * Ordem de inicialização:
  * 1. Carrega estilos globais (Tailwind + CSS variables)
- * 2. Inicializa API client (real ou mock)
- * 3. Configura interceptors (logger, error)
- * 4. Renderiza App (que inicia TenantContext → AuthContext → ThemeContext)
+ * 2. Configura interceptors do Axios (auth, logger, error)
+ * 3. Renderiza App (TenantContext → AuthContext → ThemeContext)
  */
 
 import { StrictMode } from 'react'
@@ -19,7 +18,14 @@ import '@shared/styles/globals.css'
 import { axiosInstance } from '@core/api'
 import { setupLoggerInterceptor } from '@core/api/interceptors/logger'
 import { setupErrorInterceptor } from '@core/api/interceptors/error'
-import { createApiClient } from '@core/adapters'
+import { setupAuthInterceptor } from '@core/api/interceptors/auth'
+import {
+  getAccessToken,
+  setAccessToken as storeSetAccessToken,
+  getRefreshToken,
+  setRefreshToken as storeSetRefreshToken,
+  clearTokens,
+} from '@core/api/tokenStore'
 
 import App from './App'
 
@@ -27,15 +33,31 @@ import App from './App'
 // 1. Configura interceptors globais no axios
 // ──────────────────────────────
 setupLoggerInterceptor(axiosInstance)
+
+// Auth interceptor: injeta Bearer token e trata refresh em 401
+setupAuthInterceptor(axiosInstance, {
+  getAccessToken: () => getAccessToken(),
+  setAccessToken: (token: string) => storeSetAccessToken(token),
+  refreshAccessToken: async () => {
+    const refreshTk = getRefreshToken()
+    if (!refreshTk) {
+      throw new Error('Sem refresh token')
+    }
+    const response = await axiosInstance.post('/auth/refresh', { refresh_token: refreshTk })
+    const { access_token, refresh_token } = response.data
+    storeSetAccessToken(access_token)
+    storeSetRefreshToken(refresh_token)
+  },
+  onLogout: () => {
+    clearTokens()
+    window.location.href = '/login'
+  },
+})
+
 setupErrorInterceptor(axiosInstance)
 
 // ──────────────────────────────
-// 2. Inicializa API client (Factory: real ou mock)
-// ──────────────────────────────
-createApiClient()
-
-// ──────────────────────────────
-// 3. Renderiza aplicação
+// 2. Renderiza aplicação
 // ──────────────────────────────
 const root = document.getElementById('root')
 
